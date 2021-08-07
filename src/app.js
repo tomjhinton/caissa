@@ -11,9 +11,13 @@ import Prism from 'prismjs'
 
 import * as Tone from 'tone'
 
+import vertexShader from './shaders/vertex.glsl'
+
+import fragmentShader from './shaders/fragment.glsl'
 
 // let riverSelected = Math.floor(Math.random() * fragArray.length )
 
+let turn = 0
 
 // snippet.textContent = fragArray[riverSelected]
 const points =[
@@ -27,10 +31,10 @@ const points =[
   }
 
 ]
-
-console.log(Prism)
-Prism.highlightAll()
-document.onkeydown = checkKey
+//
+// console.log(Prism)
+// Prism.highlightAll()
+// document.onkeydown = checkKey
 
 
 
@@ -38,69 +42,12 @@ document.onkeydown = checkKey
 
 const synth =  new Tone.FMSynth().toDestination()
 
-let buttonMoving = false
 
 
 
 
-function checkKey(e) {
-  e.preventDefault()
-  e = e || window.event
-  console.log(e)
-  if (e.keyCode === 38) {
-    // up arrow
-    // console.log(riverSelected)
-  } else if (e.keyCode === 40) {
-    // down arrow
-    // console.log(fragArray[riverSelected])
-  } else if (e.keyCode === 37) {
-    // left arrow
-    // scrollLeft()
 
-  } else if (e.keyCode === 39) {
-    // right arrow
-    // console.log(riverSelected)
 
-    // scrollRight()
-
-  } else if (e.keyCode === 27) {
-  // esc
-  // console.log(riverSelected)
-    modal.style.display = 'none'
-  }
-
-}
-
-// var modal = document.getElementById('myModal')
-//
-// var refresh = document.getElementById('refresh')
-//
-// refresh.onclick = function(){
-//   // scrollRight()
-// }
-//
-// // Get the button that opens the modal
-// var btn = document.getElementById('myBtn')
-//
-// // Get the <span> element that closes the modal
-// var span = document.getElementsByClassName('close')[0]
-//
-// // When the user clicks on the button, open the modal
-// btn.onclick = function() {
-//   modal.style.display = 'block'
-// }
-//
-// // When the user clicks on <span> (x), close the modal
-// span.onclick = function() {
-//   modal.style.display = 'none'
-// }
-//
-// // When the user clicks anywhere outside of the modal, close it
-// window.onclick = function(event) {
-//   if (event.target === modal) {
-//     modal.style.display = 'none'
-//   }
-// }
 
 const canvas = document.querySelector('canvas.webgl')
 
@@ -158,12 +105,26 @@ const overlayMaterial = new THREE.ShaderMaterial({
 const overlay = new THREE.Mesh(overlayGeometry, overlayMaterial)
 scene.add(overlay)
 
+const selectedMaterial  = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: true,
+  uniforms: {
+    uTime: { value: 0},
+    uResolution: { type: 'v2', value: new THREE.Vector2() }
+  },
+  vertexShader: vertexShader,
+  fragmentShader: fragmentShader,
+  side: THREE.DoubleSide
+})
 
 
 
-let sceneGroup, left, right, river, display, mixer, cloud, lightning
+let sceneGroup, left, right, river, display, mixer, cloud, lightning, whiteMat, blackMat
+
+
 
 const intersectsArr = []
+const squares = []
 gtlfLoader.load(
   'hartwigSet.glb',
   (gltf) => {
@@ -185,14 +146,43 @@ gtlfLoader.load(
     scene.add(sceneGroup)
 
 
+    const a1 = gltf.scene.children.find((child) => {
+      return child.name === 'a1'
+    })
+
+    blackMat = a1.material
+
+    const b1 = gltf.scene.children.find((child) => {
+      return child.name === 'b1'
+    })
+
+    whiteMat = b1.material
+    gltf.scene.children.filter(x => x.name.length > 2 && x.name !== 'Board').map(x => {
+      intersectsArr.push(x)
+    })
+
+    gltf.scene.children.filter(x => x.name.length  === 2 ).map(x => {
+      squares.push(x)
+    })
 
 
     // lightning.material = lightningMaterial
     // cloud.material = cloudMaterial
+    intersectsArr.map(x => {
+      squares.map(y => {
+
+        if(Math.round(x.position.z - y.position.z) ===0 && Math.round(x.position.x - y.position.x) ===0){
+          x.square = y.name
+        }
+      })
+    })
+
 
 
   }
+
 )
+
 
 
 const light = new THREE.AmbientLight( 0x404040 ) // soft white light
@@ -260,20 +250,82 @@ const mouse = new THREE.Vector2()
 
 renderer.domElement.addEventListener( 'pointerdown', onClick, false )
 
+
+let selected, previouslySelected, intersectsSquare
+
 function onClick(e) {
+  // console.log(selected)
   event.preventDefault()
-  console.log(e)
+  console.log(selected)
   mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1
   mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1
-  console.log(mouse)
+  // console.log(mouse)
   raycaster.setFromCamera( mouse, camera )
 
   var intersects = raycaster.intersectObjects( intersectsArr, true )
 
-  if ( intersects.length > 0 ) {
-    // console.log( 'Intersection:', intersects[0].object.parent.name );
-console.log(intersects[0])
 
+  if ( intersects.length > 0  && turn % 2 === 0 && intersects[0].object.name.split('_')[1][0] === 'W') {
+    intersects[0].object.material = selectedMaterial
+
+    previouslySelected = selected
+
+    selected = intersects[0].object
+
+
+    if(previouslySelected){
+      previouslySelected.material = whiteMat
+    }
+    if(selected && selected === previouslySelected){
+      selected = null
+    }
+
+    previouslySelected = null
+
+
+
+    // console.log( 'Intersection:', intersects[0].object.parent.name );
+  }
+  if(selected){
+   intersectsSquare = raycaster.intersectObjects( squares, true )
+}
+
+  if(selected && intersectsSquare[0]  && turn %2 === 0){
+
+    // console.log(selected)
+    // console.log(intersectsSquare[0].object.position)
+
+    if(Math.round(selected.position.z - intersectsSquare[0].object.position.z) !==0 || Math.round(selected.position.x - intersectsSquare[0].object.position.x) !==0){
+      selected.position.z = intersectsSquare[0].object.position.z
+      selected.position.x = intersectsSquare[0].object.position.x
+      selected.material = whiteMat
+      turn++
+      selected = null
+    }
+  }
+
+  if ( intersects.length > 0  && turn % 2 !== 0 && intersects[0].object.name.split('_')[1][0] === 'B') {
+    intersects[0].object.material = selectedMaterial
+
+    previouslySelected = selected
+    selected = intersects[0].object
+    previouslySelected.material = blackMat
+    previouslySelected = null
+    // console.log( 'Intersection:', intersects[0].object.parent.name );
+  }
+
+  if(selected && intersectsSquare[0]  && turn %2 !== 0){
+
+    console.log(selected.position)
+    console.log(intersectsSquare[0].object.position)
+
+        if(Math.round(selected.position.z - intersectsSquare[0].object.position.z) !==0 || Math.round(selected.position.x - intersectsSquare[0].object.position.x) !==0){
+          selected.position.z = intersectsSquare[0].object.position.z
+          selected.position.x = intersectsSquare[0].object.position.x
+          selected.material = blackMat
+          turn++
+          selected = null
+        }
   }
 
 
@@ -315,6 +367,8 @@ const tick = () =>{
 
   // Update controls
   controls.update()
+
+  selectedMaterial.uniforms.uTime.value = elapsedTime
 
 
 
