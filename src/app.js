@@ -40,8 +40,6 @@ const points =[
 
 
 
-const synth =  new Tone.FMSynth().toDestination()
-
 
 
 
@@ -50,6 +48,8 @@ const synth =  new Tone.FMSynth().toDestination()
 
 
 const canvas = document.querySelector('canvas.webgl')
+
+const turnText = document.getElementById('turn')
 
 const scene = new THREE.Scene()
 // scene.background = new THREE.Color( 0xffffff )
@@ -123,7 +123,7 @@ let sceneGroup, left, right, river, display, mixer, cloud, lightning, whiteMat, 
 
 
 
-const intersectsArr = []
+let intersectsArr = []
 const squares = []
 gtlfLoader.load(
   'hartwigSet.glb',
@@ -251,9 +251,16 @@ const mouse = new THREE.Vector2()
 renderer.domElement.addEventListener( 'pointerdown', onClick, false )
 
 
-let selected, previouslySelected, intersectsSquare
+let selected, previouslySelected, intersectsSquare, seq, seq2
 
+let synthFM, synthM
+
+var freeverb = new Tone.Freeverb(.5, 1000).toMaster();
+// freeverb.dampening.value = 1000;
+var pingPong = new Tone.PingPongDelay("16n", 0.8).toMaster();
 function onClick(e) {
+
+
   // console.log(selected)
   event.preventDefault()
   console.log(selected)
@@ -263,6 +270,74 @@ function onClick(e) {
   raycaster.setFromCamera( mouse, camera )
 
   var intersects = raycaster.intersectObjects( intersectsArr, true )
+  let whites = intersectsArr.filter(x => x.name.split('_')[1][0] === 'W')
+
+  let blacks = intersectsArr.filter(x => x.name.split('_')[1][0] === 'B')
+
+  let whitesS =  whites.map(x=>{
+    return (
+      x = x.square.toUpperCase()
+
+    )
+  } ).filter(x=> !x.includes('H'))
+
+  let blackS =  blacks.map(x=>{
+    return (
+      x = x.square
+    )
+  } ).filter(x=> !x.includes('h'))
+
+  const bass = new Tone.Synth({
+    oscillator : {
+      type : "triangle"
+    }
+  }).toDestination().connect(freeverb, pingPong)
+
+  const saw = new Tone.Synth({
+    oscillator : {
+      type : "sawtooth"
+    }
+  }).toDestination().connect(freeverb, pingPong)
+
+  if(seq){
+    seq.stop()
+    seq2.stop()
+  }
+
+    synthFM = new Tone.FMSynth().toDestination()
+
+    synthM = new Tone.MembraneSynth().toDestination()
+
+
+
+   seq = new Tone.Pattern((time, note) => {
+  // console.log(seq)
+  bass.triggerAttackRelease(note, 0.5, time)
+  // subdivisions are given as subarrays
+  }, whitesS, 'randomOnce').start(0)
+
+   seq2 = new Tone.Pattern((time, note) => {
+  saw.triggerAttackRelease(note, 0.1, time)
+  // subdivisions are given as subarrays
+  }, blackS, 'randomOnce').start(0)
+
+  // seq.iterations  = whitesS.length
+  // seq2.iterations  = blackS.length
+  console.log(Tone.now())
+
+  Tone.Transport.start(Tone.now())
+
+
+
+  //Tone.Transport.scheduleRepeat(repeat, "8n");
+
+
+
+
+//   const seq = new Tone.Part(function(time, note) {
+//   synthM.triggerAttackRelease(note.note, .1, time);
+// }, blackS).start(0);
+//  Tone.Transport.start();
 
 
   if ( intersects.length > 0  && turn % 2 === 0 && intersects[0].object.name.split('_')[1][0] === 'W') {
@@ -296,11 +371,36 @@ function onClick(e) {
     // console.log(intersectsSquare[0].object.position)
 
     if(Math.round(selected.position.z - intersectsSquare[0].object.position.z) !==0 || Math.round(selected.position.x - intersectsSquare[0].object.position.x) !==0){
-      selected.position.z = intersectsSquare[0].object.position.z
-      selected.position.x = intersectsSquare[0].object.position.x
-      selected.material = whiteMat
-      turn++
-      selected = null
+      // console.log(intersectsArr.filter(x => x.name.split('_')[1][0] === 'W').map( y => {
+      //   y = y.square
+      // }))
+
+
+
+
+
+      if(!whitesS.includes(intersectsSquare[0].object.name)){
+        selected.position.z = intersectsSquare[0].object.position.z
+        selected.position.x = intersectsSquare[0].object.position.x
+        selected.material = whiteMat
+        selected.square = intersectsSquare[0].object.name
+        turn++
+        selected = null
+        blacks.map( x=> {
+          if(x.square === intersectsSquare[0].object.name ){
+            sceneGroup.remove(x)
+            x.geometry.dispose()
+            x.material.dispose()
+            intersectsArr = intersectsArr.filter(y=> y.name !== x.name)
+          }
+        })
+        turnText.textContent = 'Black To Move'
+        gsap.to(camera.position, {
+          duration: 3,
+      z: camera.rotation.z + 10
+      })
+      camera.lookAt(scene)
+      }
     }
   }
 
@@ -311,7 +411,7 @@ function onClick(e) {
     selected = intersects[0].object
     previouslySelected.material = blackMat
     previouslySelected = null
-    // console.log( 'Intersection:', intersects[0].object.parent.name );
+
   }
 
   if(selected && intersectsSquare[0]  && turn %2 !== 0){
@@ -319,16 +419,34 @@ function onClick(e) {
     console.log(selected.position)
     console.log(intersectsSquare[0].object.position)
 
-        if(Math.round(selected.position.z - intersectsSquare[0].object.position.z) !==0 || Math.round(selected.position.x - intersectsSquare[0].object.position.x) !==0){
+      if(Math.round(selected.position.z - intersectsSquare[0].object.position.z) !==0 || Math.round(selected.position.x - intersectsSquare[0].object.position.x) !==0){
+
+        if(!blackS.includes(intersectsSquare[0].object.name)){
           selected.position.z = intersectsSquare[0].object.position.z
           selected.position.x = intersectsSquare[0].object.position.x
           selected.material = blackMat
+          selected.square = intersectsSquare[0].object.name
           turn++
           selected = null
+          whites.map( x=> {
+            if(x.square === intersectsSquare[0].object.name ){
+              sceneGroup.remove(x)
+              x.geometry.dispose()
+              x.material.dispose()
+              intersectsArr = intersectsArr.filter(y=> y.name !== x.name)
+            }
+          })
+          turnText.textContent = 'White To Move'
+          gsap.to(camera.position, {
+            duration: 3,
+        z: camera.rotation.z - 10
+        })
+        camera.lookAt(scene)
         }
   }
 
 
+  }
 }
 
 
